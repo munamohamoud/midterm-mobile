@@ -2,23 +2,24 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fanpage25/user.dart';
+import 'package:midterm/models/user.dart';
 
 class DatabaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  static Map<String, User> userMap = <String, User>{};
+  static Map<String, UserModel> userMap = <String, UserModel>{};
 
-  final StreamController<Map<String, User>> _usersController =
-      StreamController<Map<String, User>>();
+  final StreamController<Map<String, UserModel>> _usersController =
+      StreamController<Map<String, UserModel>>();
 
   final StreamController<Post> _postController = StreamController<Post>();
 
-  final StreamController<List<User>> _userListController =
-      StreamController<List<User>>();
+  final StreamController<List<UserModel>> _userListController =
+      StreamController<List<UserModel>>();
 
-  Stream<Map<String, User>> get users => _usersController.stream;
+  Stream<Map<String, UserModel>> get users => _usersController.stream;
   Stream<Post> get post => _postController.stream;
-  Stream<List<User>> get userList => _userListController.stream;
+  Stream<List<UserModel>> get userList => _userListController.stream;
 
   DatabaseService() {
     _firestore.collection("users").snapshots().listen(_usersUpdated);
@@ -35,10 +36,10 @@ class DatabaseService {
     _postController.add(users);
   }
 
-  Map<String, User> _getUsersFromSnapshot(
+  Map<String, UserModel> _getUsersFromSnapshot(
       QuerySnapshot<Map<String, dynamic>> snapshot) {
     for (var element in snapshot.docs) {
-      User user = User.fromJson(element.id, element.data());
+      UserModel user = UserModel.fromJson(element.id, element.data());
       userMap[user.id] = user;
     }
 

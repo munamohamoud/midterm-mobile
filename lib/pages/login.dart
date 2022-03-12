@@ -1,180 +1,152 @@
 // ignore_for_file: unnecessary_const
 
-import 'package:fanpage25/home.dart';
-import 'package:fanpage25/pages/signup.dart';
+import 'dart:developer';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:midterm/home.dart';
+import 'package:midterm/pages/signup.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:midterm/models/user.dart';
+import 'package:midterm/UIHelper.dart';
 
 class LoginPage extends StatefulWidget {
-  static String tag = 'login-page';
+  const LoginPage({Key? key}) : super(key: key);
+
   @override
   _LoginPageState createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _formKey = GlobalKey<FormState>();
+  TextEditingController emailController = TextEditingController();
+  TextEditingController passwordController = TextEditingController();
 
-  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController passwordController = TextEditingController();
+  void checkValues() {
+    String email = emailController.text.trim();
+    String password = passwordController.text.trim();
 
-  String _errorMessage = '';
+    if (email == "" || password == "") {
+      UIHelper.showAlertDialog(
+          context, "Incomplete Data", "Please fill all the fields");
+    } else {
+      logIn(email, password);
+    }
+  }
 
-  void onChange() {
-    setState(() {
-      _errorMessage = '';
-    });
+  void logIn(String email, String password) async {
+    UserCredential? credential;
+
+    UIHelper.showLoadingDialog(context, "Logging In..");
+
+    try {
+      credential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
+    } on FirebaseAuthException catch (ex) {
+      // Close the loading dialog
+      Navigator.pop(context);
+
+      // Show Alert Dialog
+      UIHelper.showAlertDialog(
+          context, "An error occured", ex.message.toString());
+    }
+
+    if (credential != null) {
+      String uid = credential.user!.uid;
+
+      DocumentSnapshot userData =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      UserModel userModel =
+          UserModel.fromMap(userData.data() as Map<String, dynamic>);
+
+      // Go to HomePage
+      print("Log In Successful!");
+      Navigator.popUntil(context, (route) => route.isFirst);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) {
+          return HomePage(
+              userModel: userModel, firebaseUser: credential!.user!);
+        }),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final node = FocusScope.of(context);
-
-    emailController.addListener(onChange);
-    passwordController.addListener(onChange);
-
-    final logo = Hero(
-      tag: 'hero',
-      child: CircleAvatar(
-        backgroundColor: Colors.transparent,
-        radius: 48.0,
-        child: Image.asset('assets/logo.png'),
-      ),
-    );
-
-    final errorMessage = Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Text(
-        _errorMessage,
-        style: const TextStyle(fontSize: 14.0, color: Colors.red),
-        textAlign: TextAlign.center,
-      ),
-    );
-
-    final email = TextFormField(
-      validator: (value) {
-        if (value!.isEmpty || !value.contains('@')) {
-          return 'Please enter a valid email.';
-        }
-        return null;
-      },
-      keyboardType: TextInputType.emailAddress,
-      autofocus: false,
-      controller: emailController,
-      decoration: InputDecoration(
-        hintText: 'Email',
-        contentPadding: const EdgeInsets.fromLTRB(20.0, 10.0, 20.0, 10.0),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(32.0)),
-      ),
-      textInputAction: TextInputAction.next,
-      onEditingComplete: () => node.nextFocus(),
-    );
-
-    final password = TextFormField(
-      autofocus: false,
-      obscureText: true,
-      controller: passwordController,
-      textInputAction: TextInputAction.done,
-      onFieldSubmitted: (v) {
-        FocusScope.of(context).requestFocus(node);
-      },
-      decoration: InputDecoration(
-        hintText: 'Password',
-        contentPadding: const EdgeInsets.fromLTRB(20.0, 10.0, 20.0, 10.0),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(32.0)),
-      ),
-    );
-
-    final loginButton = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10.0),
-      child: ElevatedButton(
-        onPressed: () {
-          if (_formKey.currentState!.validate()) {
-            signIn(emailController.text, passwordController.text)
-                .then((uid) => {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => HomePage()),
-                      )
-                    })
-                // ignore: invalid_return_type_for_catch_error
-                .catchError((error) => {processError(error)});
-          }
-        },
-        child:
-            const Text('Log In', style: const TextStyle(color: Colors.white)),
-      ),
-    );
-
-    final forgotLabel = ElevatedButton(
-      child: const Text(
-        'Forgot password?',
-        style: const TextStyle(color: Colors.black54),
-      ),
-      onPressed: () {},
-    );
-
-    final registerButton = Padding(
-      padding: EdgeInsets.zero,
-      child: ElevatedButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => SignUpPage()),
-          );
-        },
-        child:
-            const Text('Register', style: const TextStyle(color: Colors.white)),
-      ),
-    );
-
     return Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(
-          child: Form(
-            key: _formKey,
-            child: ListView(
-              shrinkWrap: true,
-              padding: const EdgeInsets.only(left: 24.0, right: 24.0),
-              children: <Widget>[
-                logo,
-                const SizedBox(height: 24.0),
-                errorMessage,
-                const SizedBox(height: 12.0),
-                email,
-                const SizedBox(height: 8.0),
-                password,
-                const SizedBox(height: 24.0),
-                loginButton,
-                registerButton,
-                forgotLabel
-              ],
+      body: SafeArea(
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: 40,
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  Text(
+                    "Chat App",
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.secondary,
+                        fontSize: 45,
+                        fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(
+                    height: 10,
+                  ),
+                  TextField(
+                    controller: emailController,
+                    decoration: InputDecoration(labelText: "Email Address"),
+                  ),
+                  SizedBox(
+                    height: 10,
+                  ),
+                  TextField(
+                    controller: passwordController,
+                    obscureText: true,
+                    decoration: InputDecoration(labelText: "Password"),
+                  ),
+                  SizedBox(
+                    height: 20,
+                  ),
+                  CupertinoButton(
+                    onPressed: () {
+                      checkValues();
+                    },
+                    color: Theme.of(context).colorScheme.secondary,
+                    child: Text("Log In"),
+                  ),
+                ],
+              ),
             ),
           ),
-        ));
-  }
-
-  Future<String> signIn(final String email, final String password) async {
-    User user = (await _firebaseAuth.signInWithEmailAndPassword(
-        email: email, password: password)) as User;
-    return user.uid;
-  }
-
-  void processError(final FirebaseAuthException error) {
-    if (error.code == "ERROR_USER_NOT_FOUND") {
-      setState(() {
-        _errorMessage = "Unable to find user. Please register.";
-      });
-    } else if (error.code == "ERROR_WRONG_PASSWORD") {
-      setState(() {
-        _errorMessage = "Incorrect password.";
-      });
-    } else {
-      setState(() {
-        _errorMessage =
-            "There was an error logging in. Please try again later.";
-      });
-    }
+        ),
+      ),
+      bottomNavigationBar: Container(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              "Don't have an account?",
+              style: TextStyle(fontSize: 16),
+            ),
+            CupertinoButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) {
+                    return SignUpPage();
+                  }),
+                );
+              },
+              child: Text(
+                "Sign Up",
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

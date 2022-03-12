@@ -1,248 +1,156 @@
-import 'package:fanpage25/pages/login.dart';
+import 'package:midterm/pages/login.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/services.dart';
+
+import 'package:midterm/UIHelper.dart';
+import 'package:midterm/models/user.dart';
+import 'package:midterm/pages/profilePage.dart';
+import 'package:flutter/cupertino.dart';
 
 class SignUpPage extends StatefulWidget {
-  static String tag = 'register-page';
+  const SignUpPage({Key? key}) : super(key: key);
+
   @override
-  _RegisterPageState createState() => _RegisterPageState();
+  _SignUpPageState createState() => _SignUpPageState();
 }
 
-class _RegisterPageState extends State<SignUpPage> {
-  // Create a global key that will uniquely identify the Form widget and allow
-  // us to validate the form
-  //
-  // Note: This is a GlobalKey<FormState>, not a GlobalKey<MyCustomFormState>!
-  final _formKey = GlobalKey<FormState>();
+class _SignUpPageState extends State<SignUpPage> {
+  TextEditingController emailController = TextEditingController();
+  TextEditingController passwordController = TextEditingController();
+  TextEditingController cPasswordController = TextEditingController();
 
-  final emailTextEditController = TextEditingController();
-  final firstNameTextEditController = TextEditingController();
-  final lastNameTextEditController = TextEditingController();
-  final passwordTextEditController = TextEditingController();
-  final confirmPasswordTextEditController = TextEditingController();
+  void checkValues() {
+    String email = emailController.text.trim();
+    String password = passwordController.text.trim();
+    String cPassword = cPasswordController.text.trim();
 
-  final FocusNode _emailFocus = FocusNode();
-  final FocusNode _firstNameFocus = FocusNode();
-  final FocusNode _lastNameFocus = FocusNode();
-  final FocusNode _passwordFocus = FocusNode();
-  final FocusNode _confirmPasswordFocus = FocusNode();
+    if (email == "" || password == "" || cPassword == "") {
+      UIHelper.showAlertDialog(
+          context, "Incomplete Data", "Please fill all the fields");
+    } else if (password != cPassword) {
+      UIHelper.showAlertDialog(context, "Password Mismatch",
+          "The passwords you entered do not match!");
+    } else {
+      signUp(email, password);
+    }
+  }
 
-  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
+  void signUp(String email, String password) async {
+    UserCredential? credential;
 
-  String _errorMessage = '';
+    UIHelper.showLoadingDialog(context, "Creating new account..");
 
-  void processError(final FirebaseAuthException error) {
-    setState(() {
-      _errorMessage = error.message!;
-    });
+    try {
+      credential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
+    } on FirebaseAuthException catch (ex) {
+      Navigator.pop(context);
+
+      UIHelper.showAlertDialog(
+          context, "An error occured", ex.message.toString());
+    }
+
+    if (credential != null) {
+      String uid = credential.user!.uid;
+      UserModel newUser =
+          UserModel(uid: uid, email: email, fullname: "", profilepic: "");
+      await FirebaseFirestore.instance
+          .collection("users")
+          .doc(uid)
+          .set(newUser.toMap())
+          .then((value) {
+        print("New User Created!");
+        Navigator.popUntil(context, (route) => route.isFirst);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) {
+            return CompleteProfile(
+                userModel: newUser, firebaseUser: credential!.user!);
+          }),
+        );
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-          child: Form(
-              key: _formKey,
-              child: ListView(
-                shrinkWrap: true,
-                padding:
-                    const EdgeInsets.only(top: 36.0, left: 24.0, right: 24.0),
-                children: <Widget>[
-                  const Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: Text(
-                      'Register',
-                      style: TextStyle(fontSize: 36.0, color: Colors.black87),
-                      textAlign: TextAlign.center,
-                    ),
+      body: SafeArea(
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: 40,
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  Text(
+                    "Chat App",
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.secondary,
+                        fontSize: 45,
+                        fontWeight: FontWeight.bold),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Text(
-                      _errorMessage,
-                      style: const TextStyle(fontSize: 14.0, color: Colors.red),
-                      textAlign: TextAlign.center,
-                    ),
+                  SizedBox(
+                    height: 10,
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: TextFormField(
-                      validator: (value) {
-                        if (value!.isEmpty || !value.contains('@')) {
-                          return 'Please enter a valid email.';
-                        }
-                        return null;
-                      },
-                      controller: emailTextEditController,
-                      keyboardType: TextInputType.emailAddress,
-                      autofocus: true,
-                      textInputAction: TextInputAction.next,
-                      focusNode: _emailFocus,
-                      onFieldSubmitted: (term) {
-                        FocusScope.of(context).requestFocus(_firstNameFocus);
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'Email',
-                        contentPadding:
-                            const EdgeInsets.fromLTRB(20.0, 10.0, 20.0, 10.0),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(32.0)),
-                      ),
-                    ),
+                  TextField(
+                    controller: emailController,
+                    decoration: InputDecoration(labelText: "Email Address"),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: TextFormField(
-                      validator: (value) {
-                        if (value!.isEmpty) {
-                          return 'Please enter your first name.';
-                        }
-                        return null;
-                      },
-                      controller: firstNameTextEditController,
-                      keyboardType: TextInputType.text,
-                      autofocus: false,
-                      textInputAction: TextInputAction.next,
-                      focusNode: _firstNameFocus,
-                      onFieldSubmitted: (term) {
-                        FocusScope.of(context).requestFocus(_lastNameFocus);
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'First Name',
-                        contentPadding:
-                            const EdgeInsets.fromLTRB(20.0, 10.0, 20.0, 10.0),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(32.0)),
-                      ),
-                    ),
+                  SizedBox(
+                    height: 10,
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: TextFormField(
-                      validator: (value) {
-                        if (value!.isEmpty) {
-                          return 'Please enter your last name.';
-                        }
-                        return null;
-                      },
-                      controller: lastNameTextEditController,
-                      keyboardType: TextInputType.text,
-                      autofocus: false,
-                      textInputAction: TextInputAction.next,
-                      focusNode: _lastNameFocus,
-                      onFieldSubmitted: (term) {
-                        FocusScope.of(context).requestFocus(_passwordFocus);
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'Last Name',
-                        contentPadding:
-                            const EdgeInsets.fromLTRB(20.0, 10.0, 20.0, 10.0),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(32.0)),
-                      ),
-                    ),
+                  TextField(
+                    controller: passwordController,
+                    obscureText: true,
+                    decoration: InputDecoration(labelText: "Password"),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: TextFormField(
-                      validator: (value) {
-                        if (value!.length < 8) {
-                          return 'Password must be longer than 8 characters.';
-                        }
-                        return null;
-                      },
-                      autofocus: false,
-                      obscureText: true,
-                      controller: passwordTextEditController,
-                      textInputAction: TextInputAction.next,
-                      focusNode: _passwordFocus,
-                      onFieldSubmitted: (term) {
-                        FocusScope.of(context)
-                            .requestFocus(_confirmPasswordFocus);
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'Password',
-                        contentPadding:
-                            const EdgeInsets.fromLTRB(20.0, 10.0, 20.0, 10.0),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(32.0)),
-                      ),
-                    ),
+                  SizedBox(
+                    height: 10,
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: TextFormField(
-                      autofocus: false,
-                      obscureText: true,
-                      controller: confirmPasswordTextEditController,
-                      focusNode: _confirmPasswordFocus,
-                      textInputAction: TextInputAction.done,
-                      validator: (value) {
-                        if (passwordTextEditController.text.length > 8 &&
-                            passwordTextEditController.text != value) {
-                          return 'Passwords do not match.';
-                        }
-                        return null;
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'Confirm Password',
-                        contentPadding:
-                            const EdgeInsets.fromLTRB(20.0, 10.0, 20.0, 10.0),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(32.0)),
-                      ),
-                    ),
+                  TextField(
+                    controller: cPasswordController,
+                    obscureText: true,
+                    decoration: InputDecoration(labelText: "Confirm Password"),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10.0),
-                    child: ElevatedButton(
-                      onPressed: () {
-                        if (_formKey.currentState!.validate()) {
-                          _firebaseAuth
-                              .createUserWithEmailAndPassword(
-                                  email: emailTextEditController.text,
-                                  password: passwordTextEditController.text)
-                              .then((onValue) {
-                            FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(_firebaseAuth.currentUser!.uid)
-                                .set({
-                              'firstName': firstNameTextEditController.text,
-                              'lastName': lastNameTextEditController.text,
-                            }).then((userInfoValue) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (context) => LoginPage()),
-                              );
-                            });
-                          }).catchError((onError) {
-                            processError(onError);
-                          });
-                        }
-                      },
-                      child: Text('Sign Up'.toUpperCase(),
-                          style: const TextStyle(color: Colors.white)),
-                    ),
+                  SizedBox(
+                    height: 20,
                   ),
-                  Padding(
-                      padding: EdgeInsets.zero,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) => LoginPage()),
-                          );
-                        },
-                        child: Text('Log In'.toUpperCase(),
-                            style: const TextStyle(color: Colors.black54)),
-                      ))
+                  CupertinoButton(
+                    onPressed: () {
+                      checkValues();
+                    },
+                    color: Theme.of(context).colorScheme.secondary,
+                    child: Text("Sign Up"),
+                  ),
                 ],
-              ))),
+              ),
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: Container(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              "Already have an account?",
+              style: TextStyle(fontSize: 16),
+            ),
+            CupertinoButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text(
+                "Log In",
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
